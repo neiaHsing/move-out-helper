@@ -501,7 +501,7 @@ export function BinView() {
            {qrUrl ? <QRCodeSVG value={qrUrl} size={140} level="M" /> : <p className="text-xs text-red-600">正在生成二维码…</p>}
            <p className="text-[10px] font-mono text-muted-foreground mt-2 break-all max-w-56">{qrUrl}</p>
            <p className="text-[10px] font-mono text-muted-foreground mt-1 uppercase tracking-widest">{bin.id}</p>
-           <p className="text-[10px] text-muted-foreground mt-2 max-w-56">手机扫码后登录，即可查看箱内最新清单。</p>
+           <p className="text-[10px] text-muted-foreground mt-2 max-w-56">手机扫码即可查看箱内最新清单。</p>
            <Button 
              variant="outline" 
              size="sm" 

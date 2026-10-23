@@ -93,3 +93,22 @@ export const itemsApi = {
     if (error) throw new Error(error.message);
   },
 };
+
+export type PublicBinManifest = {
+  bin: Pick<Bin, "id" | "name" | "description">;
+  roomName: string;
+  items: Array<Pick<Item, "id" | "name" | "description" | "quantity">>;
+};
+
+export const publicBinsApi = {
+  getManifest: async (id: string): Promise<PublicBinManifest> => {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      throw new Error("二维码链接无效");
+    }
+
+    const { data, error } = await insforge.database.rpc("get_public_bin_manifest", { p_bin_id: id });
+    if (error) throw new Error(error.message);
+    if (!data || typeof data !== "object") throw new Error("没有找到这个箱子");
+    return data as unknown as PublicBinManifest;
+  },
+};

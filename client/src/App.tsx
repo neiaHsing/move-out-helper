@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { useEffect, useState, type FormEvent } from "react";
 import { queryClient } from "./lib/queryClient";
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Box } from "lucide-react";
+import PublicBinView from "@/pages/public-bin";
 
 // InsForge refresh tokens expire after 7 days; rotate them daily while the app is open.
 const SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -39,6 +40,13 @@ function Routes({ onSignOut }: { onSignOut: () => void }) {
       </Switch>
     </Layout>
   );
+}
+
+function PublicRoutes({ onSignedIn }: { onSignedIn: () => void }) {
+  return <Switch>
+    <Route path="/bin/:id" component={PublicBinView} />
+    <Route component={() => <Login onSignedIn={onSignedIn} />} />
+  </Switch>;
 }
 
 function Login({ onSignedIn }: { onSignedIn: () => void }) {
@@ -75,8 +83,10 @@ function Login({ onSignedIn }: { onSignedIn: () => void }) {
   </main>;
 }
 
-function App() {
+function AppRoutes() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [location] = useLocation();
+  const isBinRoute = /^\/bin\/[^/]+$/.test(location);
 
   useEffect(() => {
     let active = true;
@@ -152,11 +162,15 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          {authenticated === null ? <div className="min-h-screen flex items-center justify-center">正在检查登录状态…</div> : authenticated ? <WouterRouter hook={useHashLocation}><Routes onSignOut={signOut} /></WouterRouter> : <Login onSignedIn={() => setAuthenticated(true)} />}
+          {authenticated === null && !isBinRoute ? <div className="min-h-screen flex items-center justify-center">正在检查登录状态…</div> : authenticated ? <Routes onSignOut={signOut} /> : <PublicRoutes onSignedIn={() => setAuthenticated(true)} />}
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
   );
+}
+
+function App() {
+  return <WouterRouter hook={useHashLocation}><AppRoutes /></WouterRouter>;
 }
 
 export default App;
