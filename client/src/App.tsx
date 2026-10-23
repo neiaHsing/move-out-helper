@@ -20,6 +20,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Box } from "lucide-react";
 
+// InsForge refresh tokens expire after 7 days; rotate them daily while the app is open.
+const SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SESSION_REFRESH_RETRY_MS = 60 * 60 * 1000;
+
 function Routes({ onSignOut }: { onSignOut: () => void }) {
   return (
     <Layout onSignOut={onSignOut}>
@@ -81,6 +85,61 @@ function App() {
     }).catch(() => { if (active) setAuthenticated(false); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!authenticated) return;
+
+    let active = true;
+    let refreshInProgress = false;
+    let nextRefreshAt = Date.now() + SESSION_REFRESH_INTERVAL_MS;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function scheduleRefresh(delay: number) {
+      clearTimeout(timer);
+      timer = setTimeout(() => void refreshSession(), delay);
+    }
+
+    async function refreshSession() {
+      if (!active || refreshInProgress) return;
+      refreshInProgress = true;
+      try {
+        if (!navigator.onLine) {
+          scheduleRefresh(SESSION_REFRESH_RETRY_MS);
+          return;
+        }
+
+        const { error } = await insforge.auth.refreshSession();
+        if (!active) return;
+
+        if (error) {
+          scheduleRefresh(SESSION_REFRESH_RETRY_MS);
+          return;
+        }
+
+        nextRefreshAt = Date.now() + SESSION_REFRESH_INTERVAL_MS;
+        scheduleRefresh(SESSION_REFRESH_INTERVAL_MS);
+      } catch {
+        if (active) scheduleRefresh(SESSION_REFRESH_RETRY_MS);
+      } finally {
+        refreshInProgress = false;
+      }
+    }
+
+    function refreshWhenDue() {
+      if (Date.now() >= nextRefreshAt) void refreshSession();
+    }
+
+    scheduleRefresh(SESSION_REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshWhenDue);
+    window.addEventListener("online", refreshWhenDue);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshWhenDue);
+      window.removeEventListener("online", refreshWhenDue);
+    };
+  }, [authenticated]);
 
   async function signOut() {
     await insforge.auth.signOut();
