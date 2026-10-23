@@ -26,6 +26,16 @@
   .box-label-qr { flex-shrink: 0; padding: 1mm; background: white; }
   .box-label-qr svg { width: 38mm; height: 38mm; }
   .box-label-url { width: 90mm; margin-top: 2mm; font: 7pt monospace; overflow-wrap: anywhere; }
+  .box-label-sheet .box-label-print {
+    display: inline-block;
+    vertical-align: top;
+    width: 90mm;
+    margin-right: 8mm;
+    margin-bottom: 6mm;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .box-label-sheet .box-label-print:nth-child(2n) { margin-right: 0; }
 }
 
 @custom-variant dark (&:is(.dark *));

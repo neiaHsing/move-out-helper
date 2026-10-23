@@ -57,8 +57,8 @@ function escapeHtml(value: string | number | null | undefined) {
 export default function RoomView() {
   const { id } = useParams();
   const { data: rooms = [] } = useRooms();
-  const { data: bins = [] } = useBins(id);
-  const { toast } = useToast();
+  const { data: bins = [], isLoading: binsLoading } = useBins(id);
+  const { data: allItems = [], isLoading: itemsLoading } = useItems();
   
   const room = rooms.find((r) => r.id === id);
 
@@ -66,8 +66,9 @@ export default function RoomView() {
 
   const handlePrint = () => {
     window.print();
-    toast({ description: "Sent to printer" });
   };
+
+  const labelBaseUrl = `${window.location.origin}${import.meta.env.BASE_URL}#`;
 
   if (!room) return <div className="p-8 text-center text-muted-foreground font-mono">ERR: ROOM_NOT_FOUND</div>;
 
@@ -89,9 +90,9 @@ export default function RoomView() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handlePrint} className="font-mono text-xs uppercase tracking-wider border-2 hover:bg-primary/10 hover:text-primary">
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={binsLoading || itemsLoading || bins.length === 0} className="font-mono text-xs uppercase tracking-wider border-2 hover:bg-primary/10 hover:text-primary" data-testid="button-print-bulk-labels">
             <Printer className="w-4 h-4 mr-2" />
-            打印清单
+            批量打印二维码标签
           </Button>
           <Dialog open={isAddBinOpen} onOpenChange={setIsAddBinOpen}>
             <DialogTrigger asChild>
@@ -110,14 +111,22 @@ export default function RoomView() {
         </div>
       </div>
 
-      {/* Print Only Header */}
-      <div className="hidden print:block mb-8">
-        <h1 className="text-4xl font-bold font-mono uppercase">{room.name} Manifest</h1>
-        <p className="text-xl text-gray-500">BoxTrack System Export // {new Date().toLocaleDateString()}</p>
+      <div className="hidden print:block">
+        <div className="box-label-sheet">
+          {bins.map((bin) => (
+            <PrintableBoxLabel
+              key={bin.id}
+              bin={bin}
+              roomName={room.name}
+              items={allItems.filter((item) => item.binId === bin.id)}
+              qrUrl={binLink(labelBaseUrl, bin.id)!}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Bins Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 print:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 print:hidden">
         {bins.map((bin) => (
           <BinCard key={bin.id} bin={bin} />
         ))}
@@ -135,6 +144,24 @@ export default function RoomView() {
       </div>
     </div>
   );
+}
+
+function PrintableBoxLabel({ bin, roomName, items, qrUrl }: { bin: Bin; roomName: string; items: Item[]; qrUrl: string }) {
+  return <div className="box-label-print">
+    <div className="box-label">
+      <div className="box-label-info">
+        <p className="box-label-kicker">搬家箱标签</p>
+        <h1>{bin.name}</h1>
+        <p className="box-label-room">{roomName}</p>
+        <p className="box-label-count">{items.length} 种物品 · 共 {items.reduce((count, item) => count + item.quantity, 0)} 件</p>
+        <p className="box-label-hint">扫码查看最新箱内清单</p>
+      </div>
+      <div className="box-label-qr">
+        <QRCodeSVG value={qrUrl} size={165} level="M" />
+      </div>
+    </div>
+    <p className="box-label-url">{qrUrl}</p>
+  </div>;
 }
 
 function BinCard({ bin }: { bin: Bin }) {
@@ -493,19 +520,7 @@ export function BinView() {
 
       {printMode === "label" && qrUrl && (
         <div className="hidden print:block">
-          <div className="box-label">
-            <div className="box-label-info">
-              <p className="box-label-kicker">搬家箱标签</p>
-              <h1>{bin.name}</h1>
-              <p className="box-label-room">{room?.name || "未分类"}</p>
-              <p className="box-label-count">{binItems.length} 种物品 · 共 {binItems.reduce((count, item) => count + item.quantity, 0)} 件</p>
-              <p className="box-label-hint">扫码查看最新箱内清单</p>
-            </div>
-            <div className="box-label-qr">
-              <QRCodeSVG value={qrUrl} size={165} level="M" />
-            </div>
-          </div>
-          <p className="box-label-url">{qrUrl}</p>
+          <PrintableBoxLabel bin={bin} roomName={room?.name || "未分类"} items={binItems} qrUrl={qrUrl} />
         </div>
       )}
 
