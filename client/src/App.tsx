@@ -14,16 +14,22 @@ import AllInventory from "@/pages/all-inventory";
 import AllBins from "@/pages/all-bins";
 import AllRooms from "@/pages/all-rooms";
 import NotFound from "@/pages/not-found";
-import { insforge } from "@/lib/insforge";
+import {
+  clearStoredRefreshToken,
+  getStoredRefreshToken,
+  insforge,
+  refreshStoredSession,
+  saveRefreshToken,
+} from "@/lib/insforge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Box } from "lucide-react";
 import PublicBinView from "@/pages/public-bin";
 
-// InsForge refresh tokens expire after 7 days; rotate them daily while the app is open.
-const SESSION_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const SESSION_REFRESH_RETRY_MS = 60 * 60 * 1000;
+// Rotate mobile-flow refresh tokens often enough to stay ahead of short access tokens.
+const SESSION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const SESSION_REFRESH_RETRY_MS = 60 * 1000;
 
 function Routes({ onSignOut }: { onSignOut: () => void }) {
   return (
@@ -62,6 +68,11 @@ function Login({ onSignedIn }: { onSignedIn: () => void }) {
     try {
       const result = await insforge.auth.signInWithPassword({ email: email.trim(), password });
       if (result.error || !result.data?.user) throw new Error("邮箱或密码不正确");
+      if (!result.data.refreshToken) {
+        await insforge.auth.signOut();
+        throw new Error("登录服务没有返回会话凭据，请稍后重试");
+      }
+      saveRefreshToken(result.data.refreshToken);
       setPassword("");
       onSignedIn();
     } catch (cause) {
@@ -90,8 +101,17 @@ function AppRoutes() {
 
   useEffect(() => {
     let active = true;
-    insforge.auth.getCurrentUser().then(({ data }) => {
-      if (active) setAuthenticated(Boolean(data?.user));
+    if (!getStoredRefreshToken()) {
+      setAuthenticated(false);
+      return () => { active = false; };
+    }
+
+    refreshStoredSession().then(({ data, error }) => {
+      if (!active) return;
+      if (error && (error.statusCode === 401 || error.statusCode === 403)) {
+        clearStoredRefreshToken();
+      }
+      setAuthenticated(Boolean(data?.user));
     }).catch(() => { if (active) setAuthenticated(false); });
     return () => { active = false; };
   }, []);
@@ -118,11 +138,22 @@ function AppRoutes() {
           return;
         }
 
-        const { error } = await insforge.auth.refreshSession();
+        const { data, error } = await refreshStoredSession();
         if (!active) return;
 
         if (error) {
+          if (error.statusCode === 401 || error.statusCode === 403) {
+            clearStoredRefreshToken();
+            setAuthenticated(false);
+            return;
+          }
           scheduleRefresh(SESSION_REFRESH_RETRY_MS);
+          return;
+        }
+
+        if (!data?.user) {
+          clearStoredRefreshToken();
+          setAuthenticated(false);
           return;
         }
 
@@ -136,7 +167,7 @@ function AppRoutes() {
     }
 
     function refreshWhenDue() {
-      if (Date.now() >= nextRefreshAt) void refreshSession();
+      if (document.visibilityState === "visible" && Date.now() >= nextRefreshAt) void refreshSession();
     }
 
     scheduleRefresh(SESSION_REFRESH_INTERVAL_MS);
@@ -152,9 +183,13 @@ function AppRoutes() {
   }, [authenticated]);
 
   async function signOut() {
-    await insforge.auth.signOut();
-    queryClient.clear();
-    setAuthenticated(false);
+    try {
+      await insforge.auth.signOut();
+    } finally {
+      clearStoredRefreshToken();
+      queryClient.clear();
+      setAuthenticated(false);
+    }
   }
 
   return (
