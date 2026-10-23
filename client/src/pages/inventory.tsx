@@ -69,6 +69,10 @@ export default function RoomView() {
   };
 
   const labelBaseUrl = `${window.location.origin}${import.meta.env.BASE_URL}#`;
+  const printablePages = Array.from(
+    { length: Math.ceil(bins.length / 6) },
+    (_, pageIndex) => bins.slice(pageIndex * 6, pageIndex * 6 + 6),
+  );
 
   if (!room) return <div className="p-8 text-center text-muted-foreground font-mono">ERR: ROOM_NOT_FOUND</div>;
 
@@ -113,14 +117,18 @@ export default function RoomView() {
 
       <div className="hidden print:block">
         <div className="box-label-sheet">
-          {bins.map((bin) => (
-            <PrintableBoxLabel
-              key={bin.id}
-              bin={bin}
-              roomName={room.name}
-              items={allItems.filter((item) => item.binId === bin.id)}
-              qrUrl={binLink(labelBaseUrl, bin.id)!}
-            />
+          {printablePages.map((pageBins, pageIndex) => (
+            <div className="box-label-page" key={`label-page-${pageIndex}`}>
+              {pageBins.map((bin) => (
+                <PrintableBoxLabel
+                  key={bin.id}
+                  bin={bin}
+                  roomName={room.name}
+                  items={allItems.filter((item) => item.binId === bin.id)}
+                  qrUrl={binLink(labelBaseUrl, bin.id)!}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </div>
