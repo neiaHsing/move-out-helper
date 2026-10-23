@@ -1,0 +1,103 @@
+import { Switch, Route, Router as WouterRouter } from "wouter";
+import { useHashLocation } from "wouter/use-hash-location";
+import { useEffect, useState, type FormEvent } from "react";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/components/theme-provider";
+import Layout from "@/components/layout";
+import Dashboard from "@/pages/dashboard";
+import RoomView, { BinView } from "@/pages/inventory";
+import ItemSearch from "@/pages/item-search";
+import AllInventory from "@/pages/all-inventory";
+import AllBins from "@/pages/all-bins";
+import AllRooms from "@/pages/all-rooms";
+import NotFound from "@/pages/not-found";
+import { insforge } from "@/lib/insforge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Box } from "lucide-react";
+
+function Routes({ onSignOut }: { onSignOut: () => void }) {
+  return (
+    <Layout onSignOut={onSignOut}>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/search" component={ItemSearch} />
+        <Route path="/inventory" component={AllInventory} />
+        <Route path="/bins" component={AllBins} />
+        <Route path="/rooms" component={AllRooms} />
+        <Route path="/room/:id" component={RoomView} />
+        <Route path="/bin/:id" component={BinView} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
+  );
+}
+
+function Login({ onSignedIn }: { onSignedIn: () => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    try {
+      const result = await insforge.auth.signInWithPassword({ email: email.trim(), password });
+      if (result.error || !result.data?.user) throw new Error("邮箱或密码不正确");
+      setPassword("");
+      onSignedIn();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "登录失败，请重试");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <main className="min-h-screen bg-background flex items-center justify-center p-5 font-mono">
+    <form onSubmit={submit} className="w-full max-w-sm border-2 border-border bg-card p-7 shadow-[8px_8px_0_0_hsl(var(--primary))] space-y-5">
+      <div className="flex items-center gap-3"><div className="w-11 h-11 bg-primary text-primary-foreground flex items-center justify-center"><Box /></div><div><h1 className="text-2xl font-bold tracking-tight">BOXTRACK</h1><p className="text-xs text-muted-foreground">搬家物品清单</p></div></div>
+      <p className="text-sm text-muted-foreground">输入账号和密码，查看或记录箱内物品。</p>
+      <div className="space-y-2"><Label htmlFor="email">邮箱</Label><Input id="email" type="email" autoComplete="username" value={email} onChange={event => setEmail(event.target.value)} required /></div>
+      <div className="space-y-2"><Label htmlFor="password">密码</Label><Input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required /></div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="w-full" disabled={pending}>{pending ? "正在登录…" : "登录"}</Button>
+    </form>
+  </main>;
+}
+
+function App() {
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    insforge.auth.getCurrentUser().then(({ data }) => {
+      if (active) setAuthenticated(Boolean(data?.user));
+    }).catch(() => { if (active) setAuthenticated(false); });
+    return () => { active = false; };
+  }, []);
+
+  async function signOut() {
+    await insforge.auth.signOut();
+    queryClient.clear();
+    setAuthenticated(false);
+  }
+
+  return (
+    <ThemeProvider defaultTheme="light" storageKey="boxtrack-theme">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          {authenticated === null ? <div className="min-h-screen flex items-center justify-center">正在检查登录状态…</div> : authenticated ? <WouterRouter hook={useHashLocation}><Routes onSignOut={signOut} /></WouterRouter> : <Login onSignedIn={() => setAuthenticated(true)} />}
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;
